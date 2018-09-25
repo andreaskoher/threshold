@@ -11,7 +11,7 @@ import traceback, logging
 
 
 # functions for computing the spectral radius
-from utilp import psr1uw, psr1w, psr2uw, psr2w, psr2uw_agg, ThresholdError
+from utilp import psr1uw, psr1w, psr2uw, psr2w, psr3uw, psr3w, psr4uw, psr4w, psr2uw_agg, ThresholdError
 try:
     from utilc import psr2uw as psr2uw_c
     from utilc import psr2w as psr2w_c
@@ -367,8 +367,17 @@ class threshold(object):
     Class for computing the epidemic threshold on a temporal network.
     """
     
-    _df = {('eigenvalue',False):psr1uw, ('eigenvalue',True):psr1w, ('eigenvector',False):psr2uw, ('eigenvector',True):psr2w}
-    
+    _df = {
+        ('eigenvalue' ,False, False):psr1uw,
+        ('eigenvalue' ,True , False):psr1w,
+        ('eigenvector',False, False):psr2uw,
+        ('eigenvector',True , False):psr2w,
+        ('eigenvalue' ,False, True) :psr3uw,
+        ('eigenvalue' ,True , True) :psr3w,
+        ('eigenvector',False, True) :psr4uw,
+        ('eigenvector',True , True) :psr4w
+    }
+
     # weighted can be None, True, False
     # attributes has to be given only if X is not a tnet
     def __init__(self, X, eval_max=20000, tol=1e-6, store=10, additional_time=0, weighted=None, convergence_on_eigenvector=True, attributes=None, cython=False, DMP=False, diagonal=None):
@@ -431,7 +440,7 @@ class threshold(object):
 
         # ------- PYTHON -----------
         else:
-            self._f = lambda ladda, mu, sr_target : self._df[(self._on,self._weighted)](ladda, mu, self.lA, self.N, self.T, self.eval_max, self.tol, self.store, sr_target)
+            self._f = lambda ladda, mu, sr_target : self._df[(self._on,self._weighted,DMP)](ladda, mu, self.lA, self.N, self.T, self.eval_max, self.tol, self.store, sr_target)
         ###
         
         # Additional time
