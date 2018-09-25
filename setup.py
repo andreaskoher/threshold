@@ -12,7 +12,7 @@ setup(name="Epidemic_Threshold",
           packages=find_packages(),
           test_suite="tests",
           install_requires=[i.strip() for i in open("requirements.txt").readlines()],
-          data_files=[('tests/', ['tests/*.csv'])],
+          data_files=[('tests/', ['tests/net.csv'])],
           ext_modules=cythonize(["threshold/utilc.pyx"])
           )
 

@@ -51,8 +51,8 @@ cpdef mydouble psr2uw(mydouble ladda, mydouble [:] mu, int [:] lip, int [:] li, 
                 v2[i] = (1.-mu[i])*v[i]
 
                 # multiply
-                a = lip[i+tau*(N+1)]
-                while a<lip[i+1+tau*(N+1)]:
+                a = lip[i+tau*(N+1)] + lp[tau] #CHANGED
+                while a<lip[i+1+tau*(N+1)] + lp[tau]: #CHANGED
                     v2[i] += ladda*ld[a]*v[li[a]]
                     a += 1
                 i += 1
