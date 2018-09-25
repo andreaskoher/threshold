@@ -1,11 +1,18 @@
 cimport cython
 from libc.stdlib cimport malloc, free
+from libc.math cimport log, exp, pow
 from libc.math cimport fabs as c_abs
+import warnings
+
+import numpy
+cimport numpy
 
 ctypedef long double mydouble
 ctypedef long myint
 
-# @cython.boundscheck(False)
+#@cython.boundscheck(False)
+#@cython.wraparound(False)
+#@cython.cdivision(True)
 cpdef mydouble psr2uw(mydouble ladda, mydouble [:] mu, int [:] lip, int [:] li, mydouble [:] ld, int [:] lp, myint N, myint T, myint valumax, mydouble tolerance, myint store, mydouble sr_target):
     """
     lip: indptr
@@ -36,7 +43,9 @@ cpdef mydouble psr2uw(mydouble ladda, mydouble [:] mu, int [:] lip, int [:] li, 
         i += 1
 
     cdef int flag = 0
-    cdef mydouble ecco;
+    cdef int flag_above_one_warning = 0
+    cdef int flag_negativ_element_warning = 0
+    cdef mydouble ecco
 
     with nogil:
         k = 0
@@ -85,6 +94,11 @@ cpdef mydouble psr2uw(mydouble ladda, mydouble [:] mu, int [:] lip, int [:] li, 
                     i += 1
 
                 if delta<tolerance:
+                    i = 0
+                    while i<N:
+                        if v[i] < 0:
+                            flag_negativ_element_warning = 1
+                        i += 1
                     flag = 1
                     ecco = sr**rootT - sr_target
 
@@ -105,5 +119,7 @@ cpdef mydouble psr2uw(mydouble ladda, mydouble [:] mu, int [:] lip, int [:] li, 
 
     if flag != 1:
         raise ValueError
+    if flag_negativ_element_warning:
+        warnings.warn("Value error: vector element was negativ")
 
     return ecco
