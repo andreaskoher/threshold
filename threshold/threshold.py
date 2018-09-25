@@ -14,9 +14,15 @@ import traceback, logging
 from utilp import psr1uw, psr1w, psr2uw, psr2w, psr2uw_agg, ThresholdError
 try:
     from utilc import psr2uw as psr2uw_c
+    from utilc import psr2w as psr2w_c
+    from utilc import psr4uw as psr4uw_c
+    from utilc import psr4w as psr4w_c
 except ImportError:
     warn('CYTHON CANNOT BE IMPORTED. Every cython function will be silently replaced with a pure python one.')
     psr2uw_c = None
+    psr2w_c = None
+    psr4uw_c = None
+    psr4w_c = None
     # When called, it is silently substituted by a pure python one
 
 
@@ -365,7 +371,7 @@ class threshold(object):
     
     # weighted can be None, True, False
     # attributes has to be given only if X is not a tnet
-    def __init__(self, X, eval_max=20000, tol=1e-6, store=10, additional_time=0, weighted=None, convergence_on_eigenvector=True, attributes=None, cython=False):
+    def __init__(self, X, eval_max=20000, tol=1e-6, store=10, additional_time=0, weighted=None, convergence_on_eigenvector=True, attributes=None, cython=False, DMP=False, diagonal=None):
         
         # check the type of input, and store accordingly
         if str(type(X)) == "<class 'threshold.threshold.tnet'>":
@@ -404,10 +410,26 @@ class threshold(object):
         # cython. REMEMBER 1) cython overrides the choice of weighted and 1/2 convergence functions. 2) if cython module could not be loaded, ERROR
         self.cython = cython
 
-        ###
-        if self.cython and psr2uw_c is not None:
+        # ------- CYTHON ------------
+        # IBM unweighted
+        if self.cython and not DMP and not self._weighted and psr2uw_c is not None:
             self._f = lambda ladda, mu, sr_target : psr2uw_c(ladda, mu, self.l_indptr, self.l_indices, self.l_data,
                                                              self.l_place, self.N, self.T, self.eval_max, self.tol, self.store, sr_target)
+        # IBM weighted
+        elif self.cython and not DMP and self._weighted and psr2w_c is not None:
+            self._f = lambda ladda, mu, sr_target : psr2w_c(ladda, mu, self.l_indptr, self.l_indices, self.l_data,
+                                                             self.l_place, self.N, self.T, self.eval_max, self.tol, self.store, sr_target)
+        # CBM unweighted
+        elif self.cython and DMP and not self._weighted and psr4uw_c is not None:
+            self._f = lambda ladda, mu, sr_target : psr4uw_c(ladda, mu, self.l_indptr, self.l_indices, self.l_data,
+                                                             self.l_place, self.N, self.T, self.eval_max, self.tol, self.store, sr_target, diagonal)
+        # CBM weighted
+        elif self.cython and DMP and self._weighted and psr4w_c is not None:
+            self._f = lambda ladda, mu, sr_target : psr4w_c(ladda, mu, self.l_indptr, self.l_indices, self.l_data,
+                                                             self.l_place, self.N, self.T, self.eval_max, self.tol, self.store, sr_target, diagonal)
+        
+
+        # ------- PYTHON -----------
         else:
             self._f = lambda ladda, mu, sr_target : self._df[(self._on,self._weighted)](ladda, mu, self.lA, self.N, self.T, self.eval_max, self.tol, self.store, sr_target)
         ###
