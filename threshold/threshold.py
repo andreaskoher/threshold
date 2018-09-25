@@ -11,12 +11,19 @@ import traceback, logging
 
 
 # functions for computing the spectral radius
-from utilp import psr1uw, psr1w, psr2uw, psr2w, psr2uw_agg, ThresholdError
+from utilp import psr1uw, psr1w, psr2uw, psr2w, psr3uw, psr4uw, psr3w, psr4w, psr2uw_agg, ThresholdError
 try:
     from utilc import psr2uw as psr2uw_c
+    from utilc import psr4uw as psr4uw_c
+    from utilc import psr2w as psr2w_c
+    from utilc import psr4w as psr4w_c
+
 except ImportError:
     warn('CYTHON CANNOT BE IMPORTED. Every cython function will be silently replaced with a pure python one.')
     psr2uw_c = None
+    psr4uw_c = None
+    psr2w_c = None
+    psr4w_c = None
     # When called, it is silently substituted by a pure python one
 
 
@@ -192,8 +199,7 @@ class tnet(object):
             ct += 1
             if ct==self.T:
                 assert False, 'Empty network: no edges at any time.'
-        dweight = nx.get_edge_attributes(self._lG[ct],'weight')
-        if len(dweight)>0 :
+        if nx.get_edge_attributes(self._lG[ct], "weight") != {} : 
             self._weighted = True
         else:
             self._weighted = False
@@ -361,11 +367,20 @@ class threshold(object):
     Class for computing the epidemic threshold on a temporal network.
     """
     
-    _df = {('eigenvalue',False):psr1uw, ('eigenvalue',True):psr1w, ('eigenvector',False):psr2uw, ('eigenvector',True):psr2w}
+    _df = {
+        ('eigenvalue' ,False, False):psr1uw,
+        ('eigenvalue' ,True , False):psr1w,
+        ('eigenvector',False, False):psr2uw,
+        ('eigenvector',True , False):psr2w,
+        ('eigenvalue' ,False, True) :psr3uw,
+        ('eigenvalue' ,True , True) :psr3w,
+        ('eigenvector',False, True) :psr4uw,
+        ('eigenvector',True , True) :psr4w
+    }
     
     # weighted can be None, True, False
     # attributes has to be given only if X is not a tnet
-    def __init__(self, X, eval_max=20000, tol=1e-6, store=10, additional_time=0, weighted=None, convergence_on_eigenvector=True, attributes=None, cython=False):
+    def __init__(self, X, eval_max=20000, tol=1e-6, store=10, additional_time=0, weighted=None, convergence_on_eigenvector=True, attributes=None, cython=False, DMP=False, diagonal=None, verbose=False):
         
         # check the type of input, and store accordingly
         if str(type(X)) == "<class 'threshold.threshold.tnet'>":
@@ -405,11 +420,23 @@ class threshold(object):
         self.cython = cython
 
         ###
-        if self.cython and psr2uw_c is not None:
+        if self.cython and not DMP and not self._weighted and psr2uw_c is not None:
             self._f = lambda ladda, mu, sr_target : psr2uw_c(ladda, mu, self.l_indptr, self.l_indices, self.l_data,
                                                              self.l_place, self.N, self.T, self.eval_max, self.tol, self.store, sr_target)
+        
+        elif self.cython and not DMP and self._weighted and psr2w_c is not None:
+            self._f = lambda ladda, mu, sr_target : psr2w_c(ladda, mu, self.l_indptr, self.l_indices, self.l_data,
+                                                             self.l_place, self.N, self.T, self.eval_max, self.tol, self.store, sr_target)
+        
+        elif self.cython and DMP and not self._weighted and psr4uw_c is not None:
+            self._f = lambda ladda, mu, sr_target : psr4uw_c(ladda, mu, self.l_indptr, self.l_indices, self.l_data,
+                                                             self.l_place, self.N, self.T, self.eval_max, self.tol, self.store, sr_target, diagonal)
+        
+        elif self.cython and DMP and self._weighted and psr4w_c is not None:
+            self._f = lambda ladda, mu, sr_target : psr4w_c(ladda, mu, self.l_indptr, self.l_indices, self.l_data,
+                                                             self.l_place, self.N, self.T, self.eval_max, self.tol, self.store, sr_target, diagonal)                                                 
         else:
-            self._f = lambda ladda, mu, sr_target : self._df[(self._on,self._weighted)](ladda, mu, self.lA, self.N, self.T, self.eval_max, self.tol, self.store, sr_target)
+            self._f = lambda ladda, mu, sr_target : self._df[(self._on,self._weighted,DMP)](ladda, mu, self.lA, self.N, self.T, self.eval_max, self.tol, self.store, sr_target, diagonal, verbose)
         ###
         
         # Additional time
@@ -421,7 +448,7 @@ class threshold(object):
     def compute(self, mu2, vmin=0.001, vmax=1., maxiter=50, root_finder='brentq', **kwargs):
         
         # recovery rate(s)
-        mu = np.zeros((self._N,), dtype=self._dtype)
+        #mu = np.zeros((self._N,), dtype=self._dtype)
         if type(mu2) == dict:
             # heterogeneous mu
             assert hasattr(self,'_attributes'), 'No attributes given.'
@@ -437,7 +464,7 @@ class threshold(object):
         else:
             # homogeneous mu
             #mu = mu2
-            mu[:] = mu2
+            mu = mu2
         
         if root_finder.upper() == 'BRENTQ':
             findroot = brentq
@@ -450,7 +477,7 @@ class threshold(object):
             sr_target = 1.
         else:
             # Here mu must be homogeneous (see previous assertion), so I take just the first value.
-            sr_target = np.power( 1.-mu[0], -float(self._addtime)/float(self.T) )
+            sr_target = np.power( 1.-mu, -float(self._addtime)/float(self.T) )
             
         # compute threshold, and try all possible errors
         try:
